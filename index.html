@@ -1,0 +1,138 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>SmartPark ML Studio</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--tx:#e2e8f0;--mut:#94a3b8;--ac:#38bdf8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+nav{display:flex;gap:4px;padding:10px 16px;background:#020617}nav b{margin-right:20px;color:var(--ac);align-self:center}
+button,select,input{font:inherit}button{background:#334155;color:var(--tx);border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.on{background:var(--ac);color:#000}button:disabled{opacity:.4}main{padding:16px;max-width:1200px;margin:auto}
+.card{background:var(--card);border-radius:10px;padding:14px;margin-bottom:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.help{background:#0f172a;border-left:3px solid var(--ac);color:var(--mut);padding:6px 10px;margin:4px 0 12px;font-size:12px;border-radius:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}input[type=text],input[type=number],select{background:#0f172a;color:var(--tx);border:1px solid #475569;border-radius:6px;padding:5px}
+input[type=range]{width:100%}pre{background:#020617;padding:10px;border-radius:6px;height:200px;overflow:auto;font-size:12px}
+img.plot{width:100%;background:#fff;border-radius:6px}.m{font-size:26px;font-weight:700;color:var(--ac)}.bar{height:10px;background:#0f172a;border-radius:5px}.bar>div{height:100%;background:var(--ac);border-radius:5px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+</style></head><body><div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback}=React;
+const api=(u,o)=>fetch(u,o).then(r=>r.ok?r.json():r.json().then(e=>Promise.reject(e.detail||'Error')));
+const put=(u,b)=>api(u,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+const COL=['#22C55E','#EF4444','#EAB308'],NM=['Empty','Occupied','Uncertain'];
+
+function Annotate(){
+ const [list,setList]=useState([]),[f,setF]=useState('all'),[i,setI]=useState(0),[boxes,setBoxes]=useState([]),[sel,setSel]=useState(-1),[msg,setMsg]=useState('');
+ const cv=useRef(),im=useRef(new Image()),drag=useRef(null),bx=useRef([]);bx.current=boxes;
+ const load=useCallback(()=>api('/api/images?filter='+f).then(l=>{setList(l);setI(0)}),[f]);
+ useEffect(()=>{load()},[load]);
+ const cur=list[i]?.name;
+ useEffect(()=>{if(!cur)return;setSel(-1);api('/api/labels/'+cur).then(setBoxes);im.current=new Image();im.current.onload=draw;im.current.src='/api/image/'+cur},[cur]);
+ const save=b=>{setBoxes(b);cur&&put('/api/labels/'+cur,b)};
+ function draw(){const c=cv.current,m=im.current;if(!c||!m.width)return;const s=Math.min(1,960/m.width);c.width=m.width*s;c.height=m.height*s;
+  const g=c.getContext('2d');g.drawImage(m,0,0,c.width,c.height);
+  bx.current.forEach((b,k)=>{g.strokeStyle=COL[b.cls];g.lineWidth=k===sel?3:1.5;g.strokeRect((b.x-b.w/2)*c.width,(b.y-b.h/2)*c.height,b.w*c.width,b.h*c.height);
+   if(k===sel){g.fillStyle=COL[b.cls];g.fillRect((b.x+b.w/2)*c.width-5,(b.y+b.h/2)*c.height-5,10,10)}})}
+ useEffect(draw,[boxes,sel]);
+ const pt=e=>{const r=cv.current.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]};
+ const hit=([px,py])=>{for(let k=bx.current.length-1;k>=0;k--){const b=bx.current[k];if(Math.abs(px-b.x)<=b.w/2&&Math.abs(py-b.y)<=b.h/2)return k}return -1};
+ const down=e=>{const p=pt(e),s=sel>=0?bx.current[sel]:null;
+  if(s&&Math.abs(p[0]-(s.x+s.w/2))<.015&&Math.abs(p[1]-(s.y+s.h/2))<.015){drag.current={m:'rs',k:sel};return}
+  const k=hit(p);if(k>=0){setSel(k);drag.current={m:'mv',k,p,o:{...bx.current[k]}}}else{setSel(-1);drag.current={m:'dr',p}}};
+ const move=e=>{const d=drag.current;if(!d)return;const p=pt(e),b=[...bx.current];
+  if(d.m==='mv'){b[d.k]={...d.o,x:d.o.x+p[0]-d.p[0],y:d.o.y+p[1]-d.p[1]};setBoxes(b)}
+  else if(d.m==='rs'){const o=b[d.k],x1=o.x-o.w/2,y1=o.y-o.h/2;const w=Math.max(.005,p[0]-x1),h=Math.max(.005,p[1]-y1);b[d.k]={...o,w,h,x:x1+w/2,y:y1+h/2};setBoxes(b)}
+  else{const w=Math.abs(p[0]-d.p[0]),h=Math.abs(p[1]-d.p[1]);d.tmp={cls:0,x:(p[0]+d.p[0])/2,y:(p[1]+d.p[1])/2,w,h};setBoxes([...b.filter(x=>!x.tmp),{...d.tmp,tmp:1}])}};
+ const up=()=>{const d=drag.current;drag.current=null;if(!d)return;let b=bx.current.filter(x=>!x.tmp);
+  if(d.m==='dr'&&d.tmp&&d.tmp.w>.005&&d.tmp.h>.005){b=[...b,d.tmp];setSel(b.length-1)}save(b)};
+ useEffect(()=>{const h=e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if('123'.includes(e.key)&&sel>=0)save(boxes.map((b,k)=>k===sel?{...b,cls:+e.key-1}:b));
+  if((e.key==='Delete'||e.key==='Backspace')&&sel>=0){save(boxes.filter((_,k)=>k!==sel));setSel(-1)}
+  if(e.key==='ArrowRight')setI(x=>Math.min(list.length-1,x+1));if(e.key==='ArrowLeft')setI(x=>Math.max(0,x-1))};
+  addEventListener('keydown',h);return()=>removeEventListener('keydown',h)});
+ const imp=async e=>{const fd=new FormData();[...e.target.files].forEach(x=>fd.append('files',x));const r=await api('/api/import',{method:'POST',body:fd});setMsg(`Added ${r.added}, skipped ${r.skipped} existing`);load()};
+ return <div><div className="card row">
+  <label><button onClick={e=>e.currentTarget.nextSibling.click()}>Import folder</button><input type="file" hidden multiple webkitdirectory="" onChange={imp}/></label>
+  <label><button onClick={e=>e.currentTarget.nextSibling.click()}>Import images</button><input type="file" hidden multiple accept="image/*" onChange={imp}/></label>
+  {['all','unlabeled','labeled'].map(x=><button key={x} className={f===x?'on':''} onClick={()=>setF(x)}>{x[0].toUpperCase()+x.slice(1)}</button>)}
+  <span>{list.length?`${i+1} / ${list.length}`:'No images'} {cur&&'· '+cur}</span><span style={{color:'#94a3b8'}}>{msg}</span></div>
+  <div className="card"><div className="row" style={{marginBottom:8}}>
+   <button disabled={i<=0} onClick={()=>setI(i-1)}>◀ Previous</button><button disabled={i>=list.length-1} onClick={()=>setI(i+1)}>Next ▶</button>
+   {NM.map((n,c)=><button key={c} disabled={sel<0} style={{borderBottom:`3px solid ${COL[c]}`}} onClick={()=>save(boxes.map((b,k)=>k===sel?{...b,cls:c}:b))}>{c+1}: {n}</button>)}
+   <button disabled={sel<0} onClick={()=>{save(boxes.filter((_,k)=>k!==sel));setSel(-1)}}>Delete box</button></div>
+   <canvas ref={cv} style={{maxWidth:'100%',cursor:'crosshair',background:'#000'}} onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up}/>
+   <div className="help">Drag on empty space to draw a box. Click a box to select it, drag to move, drag its corner square to resize. Keys 1/2/3 set the class, Delete removes, ←/→ navigate. Changes auto-save as YOLO .txt files.</div></div></div>}
+
+const P=[
+ ['epochs','Epochs',1,300,1,50,'How many times the model studies your whole set of photos. More epochs usually means better accuracy but slower training; too many can memorize your photos instead of learning.'],
+ ['batch','Batch Size',1,64,1,8,'How many photos the model looks at at once. Bigger is faster but needs more memory; lower it if training crashes.'],
+ ['imgsz','Image Size',320,1280,32,640,'The resolution photos are resized to. Larger sizes help detect small or distant spots but train much slower.'],
+ ['lr0','Learning Rate (lr0)',0.0001,0.1,0.0001,0.01,'How big each learning step is. Too high makes training unstable; too low makes it slow. Lower it (e.g. 0.001) when fine-tuning an existing model.'],
+ ['conf','Confidence Threshold',0.01,0.95,0.01,0.25,'Minimum certainty for a detection to count during validation. Higher = fewer but surer detections; lower = more detections, more false alarms.'],
+ ['iou','IoU Threshold',0.1,0.95,0.01,0.7,'How much two boxes may overlap before one is treated as a duplicate. Lower removes more overlapping boxes.'],
+ ['hsv_v','Brightness (hsv_v)',0,1,0.01,0.4,'Randomly brightens and darkens photos. Helps the model recognize parking spots at night or in heavy shadows. Higher = more robust to lighting, slightly slower learning.'],
+ ['hsv_s','Saturation / Contrast (hsv_s)',0,1,0.01,0.7,'Randomly makes colors more or less vivid. Simulates different camera sensors and weather glare.'],
+ ['hsv_h','Hue Shift (hsv_h)',0,0.1,0.001,0.015,'Slightly shifts colors. Helps with cameras that render colors differently. Keep it small.'],
+ ['degrees','Rotation (degrees)',0,45,1,0,'Randomly tilts photos. Useful if cameras are mounted at slightly different angles; large values can distort parking lines.'],
+ ['shear','Shear',0,20,0.5,0,'Slants the image sideways, mimicking different viewing angles. Small values only.'],
+ ['perspective','Perspective',0,0.001,0.0001,0,'Simulates looking at the lot from different heights and angles. Very sensitive; keep tiny.'],
+ ['fliplr','Flip Left-Right',0,1,0.05,0.5,'Chance of mirroring photos horizontally. Doubles your effective data; safe for most lots.'],
+ ['flipud','Flip Up-Down',0,1,0.05,0,'Chance of turning photos upside down. Usually leave at 0 for real camera views.'],
+ ['mosaic','Mosaic',0,1,0.05,1,'Glues four photos into one during training so the model sees more situations. Boosts accuracy on small datasets; turn off near the end for best fine-tuning.']];
+
+function Train(){
+ const [v,setV]=useState(Object.fromEntries(P.map(p=>[p[0],p[5]]))),[base,setBase]=useState('yolov8n.pt'),[name,setName]=useState('run1'),[opt,setOpt]=useState('auto'),[tune,setTune]=useState(false),[w,setW]=useState([]),[st,setSt]=useState({}),[err,setErr]=useState('');
+ useEffect(()=>{api('/api/weights').then(setW);const t=setInterval(()=>api('/api/train/status').then(setSt),1000);return()=>clearInterval(t)},[]);
+ const run=st.state==='running'||st.state==='cancelling';
+ const go=()=>{setErr('');api('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...v,base,name,optimizer:opt,tune})}).catch(setErr)};
+ const up=async e=>{const fd=new FormData();fd.append('file',e.target.files[0]);await api('/api/weights',{method:'POST',body:fd});api('/api/weights').then(setW)};
+ const pct=st.epochs?Math.round(100*st.epoch/st.epochs):0;
+ return <div className="grid"><div className="card"><h3>Model</h3>
+  <label>Starting weights<br/><select value={base} onChange={e=>setBase(e.target.value)}>{['yolov8n.pt','yolov8s.pt','yolo11n.pt'].map(x=><option key={x}>{x}</option>)}{w.map(x=><option key={x}>{x}</option>)}</select></label>
+  <div className="help">Pick a standard pretrained model, or one of your saved weights to keep improving it (continual learning). Nano (n) is fastest; small (s) is more accurate.</div>
+  <label><button onClick={e=>e.currentTarget.nextSibling.click()}>Upload .pt</button><input hidden type="file" accept=".pt" onChange={up}/></label>
+  <p><label>Run name<br/><input type="text" value={name} onChange={e=>setName(e.target.value)}/></label></p>
+  <div className="help">Results are saved as {name}_best.pt (highest accuracy) and {name}_last.pt (latest epoch) in your weights library.</div>
+  <label>Optimizer<br/><select value={opt} onChange={e=>setOpt(e.target.value)}>{['auto','SGD','AdamW'].map(x=><option key={x}>{x}</option>)}</select></label>
+  <div className="help">The method used to update the model. "Auto" picks a sensible one for you; AdamW is gentle for small datasets, SGD is classic and steady.</div>
+  <label><input type="checkbox" checked={tune} onChange={e=>setTune(e.target.checked)}/> Auto Hyperparameter Tuning</label>
+  <div className="help">Automatically tries many setting combinations to find the best. Can improve accuracy but takes many times longer.</div></div>
+  <div className="card"><h3>Hyperparameters & Augmentation</h3>{P.map(([k,l,mn,mx,sp,,h])=><div key={k}><label>{l}: <b>{v[k]}</b>
+   <input type="range" min={mn} max={mx} step={sp} value={v[k]} onChange={e=>setV({...v,[k]:+e.target.value})}/></label><div className="help">{h}</div></div>)}</div>
+  <div className="card"><h3>Training</h3><div className="row"><button className="on" disabled={run} onClick={go}>Start training</button><button disabled={!run} onClick={()=>api('/api/train/cancel',{method:'POST'})}>Cancel</button><span>{st.state}</span></div>
+  {err&&<p style={{color:'#f87171'}}>{String(err)}</p>}<p>Epoch {st.epoch||0} / {st.epochs||0} ({pct}%)</p><div className="bar"><div style={{width:pct+'%'}}/></div>
+  <pre>{(st.log||[]).join('\n')}</pre></div></div>}
+
+const CAP={'results.png':'Training vs. validation loss (box, cls, dfl). Lines should fall over time; if validation rises while training falls, the model is memorizing.','confusion_matrix.png':'Raw counts: rows are what was predicted, columns what was true. Big numbers on the diagonal are good.','confusion_matrix_normalized.png':'Same as above as percentages. Each column should be close to 1.0 on the diagonal.','PR_curve.png':'Precision vs. recall. The closer the curve hugs the top-right corner, the better.','F1_curve.png':'Overall score at each confidence level. The peak shows the best confidence threshold to use.'};
+function Evaluate(){
+ const [runs,setRuns]=useState([]),[r,setR]=useState(''),[d,setD]=useState(null);
+ useEffect(()=>{api('/api/runs').then(x=>{setRuns(x);x[0]&&setR(x[0])})},[]);
+ useEffect(()=>{r&&api('/api/runs/'+r).then(setD)},[r]);
+ const M=[['precision','Precision','Of all spots the model called a certain status, how many were right. High = few false alarms.'],['recall','Recall','Of all real spots, how many the model found. High = few missed cars or spaces.'],['map50','mAP@50','Overall accuracy when a box only needs to roughly overlap the true one. Closer to 1 is better.'],['map5095','mAP@50-95','Stricter accuracy that also demands tightly fitted boxes. Closer to 1 is better.']];
+ return <div><div className="card"><label>Run: <select value={r} onChange={e=>setR(e.target.value)}>{runs.map(x=><option key={x}>{x}</option>)}</select></label></div>
+  {d&&<><div className="grid">{M.map(([k,l,t])=><div className="card" key={k} title={t}><div>{l}</div><div className="m">{d.metrics[k]?(+d.metrics[k]).toFixed(3):'–'}</div><div className="help">{t}</div></div>)}</div>
+  <div className="grid">{d.plots.map(p=><div className="card" key={p}><img className="plot" src={`/runs/${r}/${p}`}/><div className="help"><b>How to read this chart:</b> {CAP[p]||'Training diagnostic.'}</div></div>)}</div></>}
+  {!runs.length&&<p>No training runs yet.</p>}</div>}
+
+function Test(){
+ const [w,setW]=useState([]),[wt,setWt]=useState(''),[file,setFile]=useState(null),[conf,setConf]=useState(.25),[unc,setUnc]=useState(.5),[iou,setIou]=useState(.45),[res,setRes]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
+ useEffect(()=>{api('/api/weights').then(x=>{setW(x);x[0]&&setWt(x[0])})},[]);
+ const go=()=>{if(!file||!wt)return;setBusy(true);setErr('');const fd=new FormData();fd.append('file',file);fd.append('weights',wt);fd.append('conf',conf);fd.append('unc_max',unc);fd.append('iou',iou);
+  api('/api/infer',{method:'POST',body:fd}).then(setRes).catch(e=>setErr(String(e))).finally(()=>setBusy(false))};
+ useEffect(()=>{if(res)go()},[conf,unc,iou]);
+ const S=({l,v,s,mn,mx,h})=><div><label>{l}: <b>{v}</b><input type="range" min={mn} max={mx} step=".01" value={v} onChange={e=>s(+e.target.value)}/></label><div className="help">{h}</div></div>;
+ return <div className="grid" style={{gridTemplateColumns:'320px 1fr'}}><div className="card">
+  <label>Weights<br/><select value={wt} onChange={e=>setWt(e.target.value)}>{w.map(x=><option key={x}>{x}</option>)}</select></label><p><input type="file" accept="image/*" onChange={e=>setFile(e.target.files[0])}/></p>
+  <S l="Detection Confidence" v={conf} s={setConf} mn={0.05} mx={0.95} h="Hides detections the model is less sure about than this."/>
+  <S l="Uncertain Zone (max)" v={unc} s={setUnc} mn={0.05} mx={0.99} h="Detections scoring between the minimum above and this value are shown in yellow."/>
+  <S l="NMS IoU" v={iou} s={setIou} mn={0.1} mx={0.95} h="Lower values remove more overlapping duplicate boxes."/>
+  <button className="on" disabled={busy||!file||!wt} onClick={go}>{busy?'Running…':'Detect'}</button>{err&&<p style={{color:'#f87171'}}>{err}</p>}</div>
+  <div className="card">{res?<><div className="row" style={{marginBottom:8}}><b>Total Spots: {res.total}</b>
+   {[['empty',0,'Empty (Green)'],['occupied',1,'Occupied (Red)'],['uncertain',2,'Uncertain (Yellow)']].map(([k,c,l])=><span key={k}><i className="dot" style={{background:COL[c]}}/>{l}: {res[k]}</span>)}</div>
+   <img src={res.image} style={{maxWidth:'100%'}}/></>:<p>Upload an image, choose weights, and press Detect.</p>}</div></div>}
+
+function App(){const [t,setT]=useState('Annotate');const T={Annotate,Train,Evaluate,Test};const C=T[t];
+ return <><nav><b>🅿 SmartPark Studio</b>{Object.keys(T).map(x=><button key={x} className={t===x?'on':''} onClick={()=>setT(x)}>{x}</button>)}</nav><main><C/></main></>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>

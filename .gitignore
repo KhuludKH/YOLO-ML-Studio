@@ -1,0 +1,17 @@
+# Ignore heavy dataset and weight files to prevent push errors
+workspace/images/
+workspace/labels/
+workspace/dataset/
+workspace/runs/
+workspace/weights/
+*.pt
+*.onnx
+
+# Ignore virtual environments and cache
+__pycache__/
+.venv/
+venv/
+
+# Ignore node modules and env variables for upcoming web interfaces
+node_modules/
+.env
