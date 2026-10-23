@@ -9,6 +9,26 @@ This tool was built as the foundational step in rebuilding my graduation project
 - **Local & Secure:** Zero cloud dependency. All datasets and model weights remain securely on your local hardware.
 - **Optimized for YOLO:** Built explicitly to fine-tune YOLO models with custom hyperparameters.
 
+
+## Studio Interfaces
+
+**1. Annotation Workspace**  
+*Quickly label objects with custom hotkeys to build a high-quality dataset.*
+![Annotation UI](assets/AnnotateUI.png)
+
+**2. Training Dashboard**  
+*Monitor YOLOv8 training progress and view live metrics locally.*
+![Training UI](assets/TrainUI.png)
+
+**3. Evaluation Metrics**  
+*Analyze model performance, precision, and recall after training.*
+![Evaluation UI](assets/EvaluateUI.png)
+
+**4. Testing & Inference**  
+*Upload test images and verify the model's real-world accuracy instantly.*
+![Testing UI](assets/TestUI.png)
+
+
 ## Quick Start
 Run the startup script based on your OS, then access the local server:
 ```bash
